@@ -380,7 +380,7 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
     cv::Rect allRect(originAllRectX-padding,originAllRectY-padding,widthAllRect+2*padding,heightAllRect+2*padding);
     cv::Mat mat=raw_Mat(allRect);
     showImage(mat);
-    // showImage(drawRectOnImage(raw_Mat,allRect));
+    showImage(drawRectOnImage(raw_Mat,allRect));
     
     
     return mat;
