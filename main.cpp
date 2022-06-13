@@ -13,7 +13,14 @@ using namespace cv;
 #define key_upper_marker @"upper_marker"       // PAD5(黒PET)
 #define key_lower_marker @"lower_marker"       // PAD位置決め、黒リファレンス
 #define key_confirm @"confirm"                 // 試験紙全体（デバッグ用途）
-
+class MyPixel{
+    public:
+     int red;
+     int blue;
+     int green;
+     int sum;
+    
+};
 void showImage(Mat image)
 {
     namedWindow("Display Image", WINDOW_AUTOSIZE);
@@ -153,7 +160,7 @@ Mat toThresholdImage(Mat img_Mat, double thresh)
 
     cv::Mat blur_mat;
     cv::GaussianBlur(gray_mat, blur_mat, cv::Size(5, 5), 0, 0); // 0,0で自動計算
-    showImage(blur_mat);
+    // showImage(blur_mat);
     cv::threshold(blur_mat, blur_mat, thresh, 255, cv::THRESH_BINARY);
     return blur_mat;
 }
@@ -304,7 +311,7 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
     Mat drawing = Mat::zeros(threshold_Mat.size(), CV_8UC3);
 
     contours = convertContourToRect(contours);
-
+    Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
     std::vector<std::vector<cv::Point>> listMinRotatedRect;
     int numberElement = 0;
     for (int i = 0; i < contours.size(); i++)
@@ -313,6 +320,7 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
         {
             listMinRotatedRect.push_back(contours[i]);
         }
+        drawContours(drawing, contours, (int)i, color);
     }
     // 黒マーカー（2個）を探す
     cv::RotatedRect marker1;
@@ -321,7 +329,7 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
     for (int i = position; i < position + 2; i++)
     {
         cv::RotatedRect rotateRect = cv::minAreaRect(listMinRotatedRect[i]);
-        Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+       
         // contour
 
         bool judgeResult = judgeBlackMarker(listMinRotatedRect[i], raw_Mat, false);
@@ -329,7 +337,7 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
         {
             continue;
         }
-        // drawContours(drawing, contours, (int)i, color);
+        
         drawRotateRect(rotateRect, drawing);
 
         if (marker1.size.width == 0)
@@ -356,7 +364,8 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
             }
         }
     }
-    showImage(drawing);
+    
+   
     cv::RotatedRect upperMarkerRect;
     cv::RotatedRect lowerMarkerRect;
     if (marker1.center.y < marker2.center.y)
@@ -379,10 +388,31 @@ Mat getSensorPartImage(Mat threshold_Mat, Mat raw_Mat, int position)
     double padding =5;
     cv::Rect allRect(originAllRectX-padding,originAllRectY-padding,widthAllRect+2*padding,heightAllRect+2*padding);
     cv::Mat mat=raw_Mat(allRect);
-    showImage(mat);
-    showImage(drawRectOnImage(raw_Mat,allRect));
-    
-    
+    int m=0 ; // number pad on between
+    if(position==0){
+        m= 14;
+    }
+    else if (position ==2){
+        m=13;
+    }
+    else if( position ==4){
+        m=12;
+    }
+    float h = upperMarkerRect.size.height;
+    float ya = originAllRectY;
+    float yb = lowerMarkerRect.center.y-lowerMarkerRect.size.height/2;
+    float distanceBetweenPad=(yb - ya - (m-2)*h)/ (m-1);
+
+ 
+    double xn=originAllRectX;
+    for(int i=0;i<m;i++)
+    {
+        double yn=ya+i*(distanceBetweenPad+h);
+        double xn=originAllRectX;
+        drawRectOnImage(raw_Mat, Rect(xn,yn,upperMarkerRect.size.width,upperMarkerRect.size.height));
+        
+    }
+
     return mat;
 }
 
@@ -402,11 +432,15 @@ CGRect *getUpperBlackMarkerPosition(Mat threshold_Mat, Mat raw_Mat)
 
     // int imageWidth =     sensorPartImage.size.width;
     // int imageHeight =     sensorPartImage.size.height;
+   Mat drawing = Mat::zeros(threshold_Mat.size(), CV_8UC3);
+   Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+   
 
     cv::RotatedRect pad4Rect;  //検出したPad4黒マーカー
     cv::RotatedRect underRect; //検出した下方黒マーカー
     for (int i = 0; i < contours.size(); i++)
     {
+        drawContours(drawing, contours, (int)i, color);
         bool judgeResult = judgeBlackMarker(contours[i], raw_Mat, false);
         if (judgeResult == false)
         {
@@ -449,7 +483,7 @@ CGRect *getUpperBlackMarkerPosition(Mat threshold_Mat, Mat raw_Mat)
             }
         }
     }
-
+    showImage(drawing);
     CGRect *rectArray = new CGRect[2];
     rectArray[0].origin.x = pad4Rect.center.x - (pad4Rect.size.width / 2);
     rectArray[0].origin.y = pad4Rect.center.y - (pad4Rect.size.height / 2);
@@ -466,89 +500,26 @@ CGRect *getUpperBlackMarkerPosition(Mat threshold_Mat, Mat raw_Mat)
 std::vector<Mat> getPadImages(Mat thresholdImage, double threshold, Mat raw_Image, double pitchAngle)
 {
     std::vector<Mat> pads = {};
-    Mat sensorPartImageTemp = getSensorPartImage(thresholdImage, raw_Image, 0);
-
+    Mat sensorPartImageTemp = getSensorPartImage(thresholdImage, raw_Image, 4);
     Mat sensorPartImage = sensorPartImageTemp;
     showImage(sensorPartImage);
-    Mat sensorPartImageTemp2 = getSensorPartImage(thresholdImage, raw_Image, 2);
-    showImage(sensorPartImageTemp2);
-    Mat sensorPartImageTemp3 = getSensorPartImage(thresholdImage, raw_Image, 4);
-    showImage(sensorPartImageTemp3);
-    Mat sensorPartImageThreshold = toThresholdImage(sensorPartImage, threshold);
+    // Mat sensorPartImageTemp2 = getSensorPartImage(thresholdImage, raw_Image, 2);
+    // showImage(sensorPartImageTemp2);
+    // Mat sensorPartImageTemp3 = getSensorPartImage(thresholdImage, raw_Image, 4);
+    // showImage(sensorPartImageTemp3);
+    Mat sensorPartImageThreshold = toThresholdImage(sensorPartImage, 130);
+    showImage(sensorPartImageThreshold);
     CGRect *blackRects = getUpperBlackMarkerPosition(sensorPartImageThreshold, sensorPartImage);
-    CGRect pad5Rect = blackRects[0];
-    CGRect lowerBlackPadRect = blackRects[1];
-    if (pad5Rect.size.width == 0)
-    {
-        return pads;
-    }
-    if (pad5Rect.origin.y < pad5Rect.size.height * 3.0)
-    {
-        return pads;
-    }
-    if (lowerBlackPadRect.size.width == 0)
-    {
-        return pads;
-    }
-    cv::Rect pad5RectCV(pad5Rect.origin.x, pad5Rect.origin.y, pad5Rect.size.width, pad5Rect.size.height);
-    cv::Rect lowerBlackPadRectCV(lowerBlackPadRect.origin.x, lowerBlackPadRect.origin.y, lowerBlackPadRect.size.width, lowerBlackPadRect.size.height);
 
-    cv::Mat pad5Ref = sensorPartImage(pad5RectCV);
-    cv::Mat lowerBlackPadRef = sensorPartImage(lowerBlackPadRectCV);
-    float bestPad2StartY = 0.0;
-    float collectionForPad2 = padPositionCorrectionValue(pitchAngle, Pad2);
-    double ratitoPad2 = 0.415 * collectionForPad2;
-    bestPad2StartY = pad5Rect.origin.y - (lowerBlackPadRect.origin.y - pad5Rect.origin.y) * ratitoPad2;
-    if (bestPad2StartY < 0)
-    {
-        return pads;
-    }
-    cv::Rect pad2Rect(pad5Rect.origin.x, bestPad2StartY, pad5Rect.size.width, pad5Rect.size.height);
-    cv::Mat pad2Ref = sensorPartImage(pad2Rect);
-    float collectionForPad3 = padPositionCorrectionValue(pitchAngle, Pad3);
-    float ratitoPad3 = 0.28 * collectionForPad3;
-    float bestPad3StartY = pad5Rect.origin.y - (lowerBlackPadRect.origin.y - pad5Rect.origin.y) * ratitoPad3;
-    if (bestPad3StartY < 0)
-    {
-        return pads;
-    }
-    cv::Rect pad3Rect(pad5Rect.origin.x, bestPad3StartY, pad5Rect.size.width, pad5Rect.size.height);
-    cv::Mat pad3Ref = sensorPartImage(pad3Rect);
-    float collectionForPad4 = padPositionCorrectionValue(pitchAngle, Pad4);
-    float ratitoPad4 = 0.135 * collectionForPad4;
-    float bestPad4StartY = pad5Rect.origin.y - (lowerBlackPadRect.origin.y - pad5Rect.origin.y) * ratitoPad4;
-    if (bestPad4StartY < 0)
-    {
-        return pads;
-    }
-    cv::Rect pad4Rect(pad5Rect.origin.x, bestPad4StartY, pad5Rect.size.width, pad5Rect.size.height);
-    cv::Mat pad4Ref = sensorPartImage(pad4Rect);
-    float collectionForPad1 = padPositionCorrectionValue(pitchAngle, Pad1);
-    float ratitoPad1 = 0.545 * collectionForPad1;
-    float bestPad1StartY = pad5Rect.origin.y - (lowerBlackPadRect.origin.y - pad5Rect.origin.y) * ratitoPad1;
-    if (bestPad1StartY < 0)
-    {
-        return pads;
-    }
-    cv::Rect pad1Rect(pad5Rect.origin.x, bestPad1StartY, pad5Rect.size.width, pad5Rect.size.height);
-    cv::Mat pad1Ref = sensorPartImage(pad1Rect);
-    cv::Mat confirmImage = sensorPartImage;
-    confirmImage = drawRectOnImage(confirmImage, pad1Rect);
-    confirmImage = drawRectOnImage(confirmImage, pad2Rect);
-    confirmImage = drawRectOnImage(confirmImage, pad3Rect);
-    confirmImage = drawRectOnImage(confirmImage, pad4Rect);
-    confirmImage = drawRectOnImage(confirmImage, pad5RectCV);
-    confirmImage = drawRectOnImage(confirmImage, lowerBlackPadRectCV);
-    pads.push_back(pad1Ref);
-    pads.push_back(pad2Ref);
-    pads.push_back(pad3Ref);
-    pads.push_back(pad4Ref);
-    pads.push_back(pad5Ref);
-    pads.push_back(lowerBlackPadRef);
+    // int ya; //upper pad
+    // int yb; // lower pad 
+   
     return pads;
 }
-
-void getPadColor(Mat image)
+bool comparePixel(MyPixel p1, MyPixel p2){
+    return p1.sum < p2.sum;
+}
+MyPixel getPadColor(Mat image)
 {
     double startX = image.rows * 0.35;
     double endX = image.rows * 0.65;
@@ -559,13 +530,47 @@ void getPadColor(Mat image)
     double intervalY = (endY - startY) * (numberPoint - 1);
     int y = 0;
     int countOfY = 0;
+    int numberPixel=0;
+   
+    std::vector<MyPixel> listPixels;
     for (countOfY = 0; countOfY < numberPoint; countOfY++)
     {
         for (int countOfX = 0; countOfX < numberPoint; countOfX++)
         {
             Vec3b pixel = image.at<Vec3b>(startX + intervalX * countOfX, startY + intervalY * countOfY);
+            int r =pixel(2);
+            int g = pixel(1);
+            int b = pixel(0);
+            MyPixel myPixel;
+            myPixel.red=r;
+            myPixel.green=g;
+            myPixel.blue=b;
+            myPixel.sum=r+g+b;
+            listPixels.push_back(myPixel);
         }
     }
+    sort(listPixels.begin(),listPixels.end(),comparePixel);
+    int exclusion=2;
+    int sumRed=0;
+    int sumBlue=0;
+    int sumGreen=0;
+    for (int i = exclusion; i < listPixels.size()-exclusion; i++)
+    {
+        sumRed+=listPixels[i].red;
+        sumBlue+=listPixels[i].blue;
+        sumGreen+=listPixels[i].green;
+    }
+    int averageRed=sumRed/(listPixels.size()-exclusion*2);
+    int averageBlue=sumBlue/(listPixels.size()-exclusion*2);
+    int averageGreen=sumGreen/(listPixels.size()-exclusion*2);
+    MyPixel averagePixel;
+    averagePixel.red=averageRed;
+    averagePixel.blue=averageBlue;
+    averagePixel.green=averageGreen;
+    averagePixel.sum=averageRed+averageBlue+averageGreen;
+    return averagePixel;
+    
+
 }
 int main(int argc, char **argv)
 {
@@ -590,7 +595,7 @@ int main(int argc, char **argv)
     // imwrite("threshold.jpg", toThresholdImage(image,80.0));
 
     // image= toFilter2DImage(image);
-    int threshold=5;
+    int threshold=3;
     cv::Mat thresholdImage= toThresholdImage(image,threshold);
     showImage(thresholdImage);
     double pitchAngle = 0.0;
